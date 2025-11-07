@@ -1,0 +1,92 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Jupyter
+.ipynb_checkpoints
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+
+# ML Models
+gatekeeper/ml/models/*.pkl
+*.h5
+*.pt
+*.pth
+
+# Data (keep structure, ignore contents)
+data/events/*
+data/captures/*
+data/models/*
+data/simulations/*
+!data/samples/
+!data/.gitkeep
+
+# Logs
+*.log
+logs/
+
+# Docker
+.dockerignore
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Secrets
+secrets/
+*.pem
+*.key
+*.crt
+
+# Temporary
+tmp/
+temp/
+*.tmp
+
+# OS
+Thumbs.db
+desktop.ini
