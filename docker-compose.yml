@@ -1,0 +1,216 @@
+version: '3.8'
+
+services:
+  # Message Bus
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    hostname: kafka
+    container_name: cerberus-kafka
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092'
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka:29093'
+      KAFKA_LISTENERS: 'PLAINTEXT://kafka:29092,CONTROLLER://kafka:29093,PLAINTEXT_HOST://0.0.0.0:9092'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      KAFKA_LOG_DIRS: '/tmp/kraft-combined-logs'
+      CLUSTER_ID: 'MkU3OEVBNTcwNTJENDM2Qk'
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+    networks:
+      - cerberus-net
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: cerberus-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: cerberus
+      POSTGRES_USER: cerberus
+      POSTGRES_PASSWORD: cerberus_password
+    networks:
+      - cerberus-net
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: cerberus-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    networks:
+      - cerberus-net
+    volumes:
+      - redis-data:/data
+
+  # MinIO (S3-compatible storage)
+  minio:
+    image: minio/minio:latest
+    container_name: cerberus-minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: cerberus
+      MINIO_ROOT_PASSWORD: cerberus_minio_password
+    command: server /data --console-address ":9001"
+    networks:
+      - cerberus-net
+    volumes:
+      - minio-data:/data
+
+  # Gatekeeper (WAF + ML)
+  gatekeeper:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.gatekeeper
+    container_name: cerberus-gatekeeper
+    ports:
+      - "8000:8000"
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - REDIS_URL=redis://redis:6379
+      - POSTGRES_URL=postgresql://cerberus:cerberus_password@postgres:5432/cerberus
+    depends_on:
+      - kafka
+      - redis
+      - postgres
+    networks:
+      - cerberus-net
+    volumes:
+      - ./data:/app/data
+      - ./gatekeeper:/app/gatekeeper
+
+  # Switch (Session Router)
+  switch:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.switch
+    container_name: cerberus-switch
+    ports:
+      - "8001:8001"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - PRODUCTION_BACKEND=http://production-backend:8080
+      - LABYRINTH_BACKEND=http://labyrinth:8002
+    depends_on:
+      - redis
+      - labyrinth
+    networks:
+      - cerberus-net
+    volumes:
+      - ./data:/app/data
+
+  # Labyrinth (Honeypot)
+  labyrinth:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.labyrinth
+    container_name: cerberus-labyrinth
+    ports:
+      - "8002:8002"
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=cerberus
+      - MINIO_SECRET_KEY=cerberus_minio_password
+    depends_on:
+      - kafka
+      - minio
+    networks:
+      - cerberus-net
+      - labyrinth-isolated  # Isolated network for honeypot
+    volumes:
+      - ./data:/app/data
+
+  # Sentinel (Threat Twin AI)
+  sentinel:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.sentinel
+    container_name: cerberus-sentinel
+    ports:
+      - "8003:8003"
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - POSTGRES_URL=postgresql://cerberus:cerberus_password@postgres:5432/cerberus
+      - GATEKEEPER_API_URL=http://gatekeeper:8000
+    depends_on:
+      - kafka
+      - postgres
+      - gatekeeper
+    networks:
+      - cerberus-net
+    volumes:
+      - ./data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock  # For sandbox provisioning
+    privileged: true  # Required for Docker-in-Docker
+
+  # Production Backend (Mock)
+  production-backend:
+    image: nginx:alpine
+    container_name: cerberus-production-mock
+    ports:
+      - "8080:80"
+    networks:
+      - cerberus-net
+    volumes:
+      - ./infrastructure/nginx/production-mock.conf:/etc/nginx/conf.d/default.conf
+
+  # Prometheus (Metrics)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: cerberus-prometheus
+    ports:
+      - "9090:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    networks:
+      - cerberus-net
+    volumes:
+      - ./infrastructure/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+
+  # Grafana (Dashboard)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: cerberus-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    networks:
+      - cerberus-net
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./infrastructure/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./infrastructure/grafana/datasources:/etc/grafana/provisioning/datasources
+
+networks:
+  cerberus-net:
+    driver: bridge
+  labyrinth-isolated:
+    driver: bridge
+    internal: true  # No external access
+
+volumes:
+  kafka-data:
+  postgres-data:
+  redis-data:
+  minio-data:
+  prometheus-data:
+  grafana-data:
