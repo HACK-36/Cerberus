@@ -1,0 +1,279 @@
+{
+  "sample_poi_tagged_event": {
+    "event_id": "evt_demo001",
+    "timestamp": "2024-11-07T18:45:23.123Z",
+    "source": "gatekeeper",
+    "event_type": "poi_tagged",
+    "session_id": "sess_a1b2c3d4",
+    "client_ip": "203.0.113.42",
+    "request": {
+      "method": "GET",
+      "url": "/admin/users?id=1' OR '1'='1",
+      "headers": {
+        "User-Agent": "sqlmap/1.5.0",
+        "Host": "example.com",
+        "Accept": "*/*"
+      },
+      "body": "",
+      "query_params": {
+        "id": "1' OR '1'='1"
+      }
+    },
+    "tags": [
+      "poi",
+      "sql_injection_suspected",
+      "ml_high_score",
+      "automated_tool"
+    ],
+    "scores": {
+      "modsecurity": 85.0,
+      "ml_anomaly": 0.92,
+      "combined": 94.0
+    },
+    "action": "tagged",
+    "geoip": {
+      "country": "CN",
+      "region": "Beijing",
+      "city": "Beijing",
+      "asn": "AS4134",
+      "is_tor": false,
+      "is_vpn": false
+    },
+    "meta": {
+      "detection_method": "ml_anomaly",
+      "confidence": 0.92,
+      "threat_intel": {
+        "known_bad_ip": false,
+        "previous_attacks": 0
+      }
+    }
+  },
+  "sample_session_pinned_event": {
+    "event_id": "evt_demo002",
+    "timestamp": "2024-11-07T18:45:23.456Z",
+    "source": "switch",
+    "event_type": "session_pinned",
+    "session_id": "sess_a1b2c3d4",
+    "client_ip": "203.0.113.42",
+    "fingerprint": "fp_9e8f7d6c",
+    "action": "redirected",
+    "target": "labyrinth",
+    "pin_duration_hours": 24,
+    "reason": "poi_tagged_by_gatekeeper",
+    "meta": {
+      "original_destination": "production",
+      "pinned_at": "2024-11-07T18:45:23.456Z",
+      "expires_at": "2024-11-08T18:45:23.456Z"
+    }
+  },
+  "sample_payload_captured_event": {
+    "event_id": "evt_demo003",
+    "timestamp": "2024-11-07T18:45:30.789Z",
+    "source": "labyrinth",
+    "event_type": "payload_captured",
+    "session_id": "sess_a1b2c3d4",
+    "client_ip": "203.0.113.42",
+    "capture_id": "cap_3f4e5d6c",
+    "request": {
+      "method": "POST",
+      "url": "/api/v1/users",
+      "headers": {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer fake_token_12345"
+      },
+      "body": "{\"name\":\"admin' OR '1'='1--\",\"email\":\"attacker@evil.com\"}",
+      "query_params": {}
+    },
+    "extracted_payloads": [
+      {
+        "type": "sql_injection",
+        "value": "admin' OR '1'='1--",
+        "location": "json_body.name",
+        "confidence": 0.95
+      }
+    ],
+    "evidence_url": "s3://cerberus-evidence/cap_3f4e5d6c.json",
+    "meta": {
+      "interaction_number": 3,
+      "previous_paths": ["/api/v1/users", "/admin", "/admin/config"]
+    }
+  },
+  "sample_simulation_complete_event": {
+    "event_id": "evt_demo004",
+    "timestamp": "2024-11-07T18:46:15.234Z",
+    "source": "sentinel",
+    "event_type": "simulation_complete",
+    "session_id": "sess_a1b2c3d4",
+    "client_ip": "203.0.113.42",
+    "simulation_id": "sim_7k8l9m0n",
+    "payload_id": "payload_3f4e5d6c",
+    "result": {
+      "verdict": "exploit_possible",
+      "severity": 9.2,
+      "attack_type": "sql_injection",
+      "exploitation_evidence": "Unauthorized data extraction detected: 1247 records accessed",
+      "affected_resources": [
+        "database:users",
+        "database:api_keys",
+        "database:sessions"
+      ],
+      "reproduction_steps": [
+        "Deploy shadow app from commit abc123def456",
+        "Seed database with 1000 synthetic users",
+        "Send POST /api/v1/users with malicious payload",
+        "Observe database query log for unauthorized SELECT",
+        "Verify 1247 records returned in response"
+      ]
+    },
+    "execution_time_ms": 4523,
+    "meta": {
+      "sandbox_id": "sandbox_docker_12345",
+      "shadow_app_ref": "main@abc123def456",
+      "simulation_environment": "docker_isolated"
+    }
+  },
+  "sample_rule_generated_event": {
+    "event_id": "evt_demo005",
+    "timestamp": "2024-11-07T18:46:20.567Z",
+    "source": "sentinel",
+    "event_type": "rule_generated",
+    "session_id": "sess_a1b2c3d4",
+    "client_ip": "203.0.113.42",
+    "rule": {
+      "rule_id": "rule_6s7t8u9v",
+      "created_by": "sentinel",
+      "created_at": "2024-11-07T18:46:20.567Z",
+      "priority": 100,
+      "match": {
+        "type": "regex",
+        "pattern": "'\\s*(OR|AND)\\s*'[^']*'\\s*=\\s*'[^']*",
+        "location": ["args", "body", "json_values"],
+        "flags": {
+          "caseless": true
+        }
+      },
+      "action": "block",
+      "confidence": 0.95,
+      "evidence": {
+        "simulation_id": "sim_7k8l9m0n",
+        "sample_payloads": [
+          "admin' OR '1'='1--",
+          "' OR 1=1--",
+          "admin' OR '1'='1"
+        ],
+        "severity": 9.2,
+        "attack_type": "sql_injection"
+      },
+      "valid_from": "2024-11-07T18:46:20.567Z",
+      "expires_at": null,
+      "audit": {
+        "sim_verdict": "exploit_possible",
+        "sim_score": 9.2,
+        "attacker_ttp": ["T1190"],
+        "auto_applied": true,
+        "applied_at": "2024-11-07T18:46:21.123Z"
+      },
+      "enabled": true
+    },
+    "action": "auto_applied",
+    "reason": "high_confidence",
+    "meta": {
+      "gatekeeper_response": {
+        "status": "success",
+        "rule_deployed": true,
+        "hot_reload": true
+      }
+    }
+  },
+  "sample_file_upload_event": {
+    "event_id": "evt_demo006",
+    "timestamp": "2024-11-07T18:47:30.123Z",
+    "source": "labyrinth",
+    "event_type": "payload_captured",
+    "session_id": "sess_a1b2c3d4",
+    "client_ip": "203.0.113.42",
+    "capture_id": "cap_upload001",
+    "request": {
+      "method": "POST",
+      "url": "/api/v1/upload",
+      "headers": {
+        "Content-Type": "multipart/form-data"
+      },
+      "body": "<binary data>",
+      "query_params": {}
+    },
+    "extracted_payloads": [
+      {
+        "type": "file_upload",
+        "value": "webshell.php",
+        "location": "file_upload",
+        "confidence": 0.88
+      }
+    ],
+    "evidence_url": "s3://cerberus-evidence/cap_upload001.json",
+    "meta": {
+      "filename": "webshell.php",
+      "filesize": 2048,
+      "file_hash_sha256": "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+      "malware_scan": "suspicious",
+      "stored_path": "/app/data/captures/uploads/20241107_184730_webshell.php"
+    }
+  },
+  "sample_attacker_profile": {
+    "session_id": "sess_a1b2c3d4",
+    "action_sequence": [
+      "reconnaissance",
+      "user_enumeration",
+      "sql_injection_attempt",
+      "admin_access_attempt",
+      "config_disclosure_attempt",
+      "file_upload_attempt"
+    ],
+    "action_count": 6,
+    "ttps": [
+      "T1190",
+      "T1087",
+      "T1083",
+      "T1105"
+    ],
+    "intent": "exploitation",
+    "sophistication_score": 6.5,
+    "cluster_id": 2,
+    "duration_seconds": 127.5,
+    "unique_endpoints": 5,
+    "summary": "Intent: Exploitation. Actions: reconnaissance, user_enumeration, sql_injection_attempt, admin_access_attempt, config_disclosure_attempt. TTPs: T1190, T1087, T1083. Total requests: 6."
+  },
+  "sample_waf_rule": {
+    "rule_id": "rule_6s7t8u9v",
+    "created_by": "sentinel",
+    "created_at": "2024-11-07T18:46:20.567Z",
+    "priority": 100,
+    "match": {
+      "type": "regex",
+      "pattern": "'\\s*(OR|AND)\\s*'[^']*'\\s*=\\s*'[^']*",
+      "location": ["args", "body", "json_values"],
+      "flags": {
+        "caseless": true
+      }
+    },
+    "action": "block",
+    "confidence": 0.95,
+    "evidence": {
+      "simulation_id": "sim_7k8l9m0n",
+      "sample_payloads": [
+        "admin' OR '1'='1--",
+        "' OR 1=1--"
+      ],
+      "severity": 9.2,
+      "attack_type": "sql_injection"
+    },
+    "valid_from": "2024-11-07T18:46:20.567Z",
+    "expires_at": null,
+    "audit": {
+      "sim_verdict": "exploit_possible",
+      "sim_score": 9.2,
+      "attacker_ttp": ["T1190"]
+    },
+    "enabled": true
+  }
+}
