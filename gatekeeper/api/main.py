@@ -302,8 +302,38 @@ def check_waf_rules(req: InspectRequest) -> tuple[float, Optional[str]]:
                 if rule.action == "block":
                     return 100.0, rule_id
                 score = max(score, 85.0)
-    
+
+    heuristic_score = _heuristic_modsecurity_score(combined_text)
+    score = max(score, heuristic_score)
+
     return score, None
+
+
+def _heuristic_modsecurity_score(combined_text: str) -> float:
+    """Approximate ModSecurity scoring for common attack signatures."""
+    text_lower = combined_text.lower()
+    score = 0.0
+
+    # SQL injection patterns
+    if "' or '" in text_lower or '" or "' in text_lower:
+        score = max(score, 80.0)
+    if "' and '" in text_lower or '" and "' in text_lower:
+        score = max(score, 70.0)
+    if "union" in text_lower and "select" in text_lower:
+        score = max(score, 90.0)
+    if "information_schema" in text_lower or "benchmark" in text_lower or "sleep(" in text_lower:
+        score = max(score, 85.0)
+
+    # Path traversal
+    if "../" in text_lower or "..\\" in text_lower:
+        score = max(score, 75.0)
+
+    # Command injection
+    if any(cmd in text_lower for cmd in [";", "&&", "||", "|", "`"]):
+        if "rm " in text_lower or "cat /etc/passwd" in text_lower:
+            score = max(score, 80.0)
+
+    return score
 
 
 def calculate_combined_score(modsec: float, ml: float, behavioral: float) -> float:
