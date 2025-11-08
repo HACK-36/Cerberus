@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  nginx-gatekeeper:
+    image: owasp/modsecurity:nginx
+    ports:
+      - "8080:80"
+    volumes:
+      - ./gatekeeper/nginx_stub/nginx.conf:/etc/nginx/nginx.conf
+      - ./gatekeeper/nginx_stub/modsecurity.conf:/etc/nginx/modsecurity.conf
+    depends_on:
+      - gatekeeper
+    networks:
+      - cerberus-net
+
+  gatekeeper-ml-scorer:
+    image: python:3.11-slim
+    command: python -c "
+from flask import Flask, request
+import json
+
+app = Flask(__name__)
+
+@app.route('/score', methods=['POST'])
+def score():
+    data = request.json
+    if 'X-POI' in request.headers and request.headers['X-POI'] == 'test':
+        return {'score': 0.99, 'malicious': True}
+    else:
+        return {'score': 0.0, 'malicious': False}
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)
+"
+    ports:
+      - "5000:5000"
+    networks:
+      - cerberus-net
+
+  gatekeeper:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.gatekeeper
+    ports:
+      - "8000:8000"
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - REDIS_URL=redis://redis:6379
+      - POSTGRES_URL=postgresql://cerberus:cerberus_password@postgres:5432/cerberus
+    depends_on:
+      - kafka
+      - redis
+      - postgres
+    networks:
+      - cerberus-net
+    volumes:
+      - ./data:/app/data
+      - ./gatekeeper:/app/gatekeeper
+
+networks:
+  cerberus-net:
+    driver: bridge
