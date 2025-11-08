@@ -87,6 +87,22 @@ tmp/
 temp/
 *.tmp
 
+# Node
+node_modules/
+dashboard/node_modules/
+war-room-server/node_modules/
+**/node_modules/
+dashboard/.next/
+war-room-server/.next/
+
+# Reports (local only)
+COMPLETION_REPORT.md
+PROJECT_SUMMARY.md
+QUICKSTART.md
+STRUCTURE.md
+WAR_ROOM_SETUP.md
+
 # OS
 Thumbs.db
 desktop.ini
+**/.DS_Store
