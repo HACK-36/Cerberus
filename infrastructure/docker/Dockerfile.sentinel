@@ -2,6 +2,9 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# Ensure shared modules are importable from /app
+ENV PYTHONPATH=/app
+
 # Install Docker CLI for sandbox provisioning
 RUN apt-get update && apt-get install -y \
     curl \

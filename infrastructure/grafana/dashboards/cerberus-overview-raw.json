@@ -1,0 +1,53 @@
+{
+  "id": null,
+  "uid": "cerberus-overview",
+  "title": "Cerberus Security Platform - Complete Attack Flow",
+  "timezone": "browser",
+  "tags": ["cerberus", "security", "ml", "honeypot"],
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "5s",
+  "time": {"from": "now-15m", "to": "now"},
+  "panels": [
+    {
+      "id": 1,
+      "title": "📊 System Health (Services Up)",
+      "type": "stat",
+      "gridPos": {"h": 6, "w": 8, "x": 0, "y": 0},
+      "targets": [
+        { "expr": "sum(up{job=~\"gatekeeper|switch|labyrinth|sentinel\"})", "legendFormat": "Services Up" }
+      ],
+      "options": { "colorMode": "background", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false } }
+    },
+    {
+      "id": 2,
+      "title": "🔒 Gatekeeper Requests/sec",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 8, "x": 8, "y": 0},
+      "targets": [
+        { "expr": "rate(cerberus_requests_total{service=\"gatekeeper\"}[1m])", "legendFormat": "Gatekeeper" }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "🍯 Labyrinth Requests/sec",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 8, "x": 16, "y": 0},
+      "targets": [
+        { "expr": "rate(cerberus_requests_total{service=\"labyrinth\"}[1m])", "legendFormat": "Labyrinth" }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "🎯 Attack Flow Timeline",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 6},
+      "targets": [
+        { "expr": "rate(cerberus_requests_total{service=\"gatekeeper\"}[1m])", "legendFormat": "1️⃣ Gatekeeper" },
+        { "expr": "rate(cerberus_poi_tagged_total[1m])", "legendFormat": "2️⃣ POI Tagged" },
+        { "expr": "rate(cerberus_requests_total{service=\"labyrinth\"}[1m])", "legendFormat": "3️⃣ Honeypot" },
+        { "expr": "rate(cerberus_simulations_total[1m])", "legendFormat": "4️⃣ Sentinel" }
+      ]
+    }
+  ]
+}

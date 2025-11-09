@@ -1,424 +1,193 @@
 {
-  "annotations": {
-    "list": []
-  },
-  "editable": true,
-  "gnetId": null,
-  "graphTooltip": 0,
-  "id": null,
-  "links": [],
-  "panels": [
-    {
-      "datasource": "CerberusPrometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "tooltip": false,
-              "viz": false,
-              "legend": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": true
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "reqps"
-        }
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 0
-      },
-      "id": 1,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "single"
-        }
-      },
-      "pluginVersion": "8.0.0",
-      "targets": [
-        {
-          "expr": "rate(cerberus_requests_total[1m])",
-          "legendFormat": "{{service}} - {{endpoint}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Request Rate by Service",
-      "type": "timeseries"
-    },
-    {
-      "datasource": "CerberusPrometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 0.5
-              }
-            ]
-          },
-          "unit": "s"
-        }
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 0
-      },
-      "id": 2,
-      "options": {
-        "orientation": "auto",
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": ""
-        },
-        "showThresholdLabels": false,
-        "showThresholdMarkers": true
-      },
-      "pluginVersion": "8.0.0",
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.99, rate(cerberus_request_duration_seconds_bucket[5m]))",
-          "legendFormat": "{{service}} - p99",
-          "refId": "A"
-        }
-      ],
-      "title": "Request Latency (p99)",
-      "type": "gauge"
-    },
-    {
-      "datasource": "CerberusPrometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "tooltip": false,
-              "viz": false,
-              "legend": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": true
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
+  "dashboard": {
+    "title": "Cerberus Security Platform - Complete Attack Flow",
+    "uid": "cerberus-overview",
+    "tags": ["cerberus", "security", "ml", "honeypot"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "🔒 Gatekeeper - ML Threat Detection",
+        "type": "stat",
+        "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0},
+        "targets": [
+          {
+            "expr": "rate(cerberus_requests_total{service=\"gatekeeper\"}[1m])",
+            "legendFormat": "Requests/sec"
           }
-        }
+        ]
       },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 8
-      },
-      "id": 3,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "single"
-        }
-      },
-      "pluginVersion": "8.0.0",
-      "targets": [
-        {
-          "expr": "sum(cerberus_threats_detected_total) by (service, threat_type)",
-          "legendFormat": "{{service}} - {{threat_type}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Threats Detected",
-      "type": "timeseries"
-    },
-    {
-      "datasource": "CerberusPrometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [
-            {
-              "options": {
-                "0": {
-                  "color": "red",
-                  "index": 1,
-                  "text": "DOWN"
-                },
-                "1": {
-                  "color": "green",
-                  "index": 0,
-                  "text": "UP"
-                }
-              },
-              "type": "value"
-            }
-          ],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "green",
-                "value": 1
-              }
-            ]
+      {
+        "id": 2,
+        "title": "🍯 Labyrinth - Honeypot Interactions",
+        "type": "stat",
+        "gridPos": {"h": 8, "w": 6, "x": 6, "y": 0},
+        "targets": [
+          {
+            "expr": "rate(cerberus_requests_total{service=\"labyrinth\"}[1m])",
+            "legendFormat": "Honeypot Hits/sec"
           }
-        }
+        ]
       },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 8
-      },
-      "id": 4,
-      "options": {
-        "displayMode": "gradient",
-        "orientation": "horizontal",
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": ""
-        },
-        "showUnfilled": true
-      },
-      "pluginVersion": "8.0.0",
-      "targets": [
-        {
-          "expr": "up{job=~\"gatekeeper|switch|labyrinth|sentinel|redis_exporter|kafka_exporter\"}",
-          "legendFormat": "{{job}} - {{instance}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Service Health",
-      "type": "bargauge"
-    },
-    {
-      "datasource": "CerberusPrometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "tooltip": false,
-              "viz": false,
-              "legend": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": true
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
+      {
+        "id": 3,
+        "title": "🤖 Sentinel - Threat Analysis",
+        "type": "stat",
+        "gridPos": {"h": 8, "w": 6, "x": 12, "y": 0},
+        "targets": [
+          {
+            "expr": "rate(cerberus_simulations_total[1m])",
+            "legendFormat": "Simulations/sec"
           }
-        }
+        ]
       },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 16
-      },
-      "id": 5,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "single"
-        }
-      },
-      "pluginVersion": "8.0.0",
-      "targets": [
-        {
-          "expr": "sum(cerberus_evidence_packages_created_total) by (service)",
-          "legendFormat": "{{service}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Evidence Packages Created",
-      "type": "timeseries"
-    },
-    {
-      "datasource": "CerberusPrometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "tooltip": false,
-              "viz": false,
-              "legend": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": true
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
+      {
+        "id": 4,
+        "title": "📊 System Health",
+        "type": "stat",
+        "gridPos": {"h": 8, "w": 6, "x": 18, "y": 0},
+        "targets": [
+          {
+            "expr": "up{job=~\"gatekeeper|switch|labyrinth|sentinel\"}",
+            "legendFormat": "{{job}}"
           }
-        }
+        ]
       },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 16
+      {
+        "id": 5,
+        "title": "🎯 Attack Flow: Request → Detection → Honeypot → Analysis",
+        "type": "timeseries",
+        "gridPos": {"h": 10, "w": 24, "x": 0, "y": 8},
+        "targets": [
+          {
+            "expr": "rate(cerberus_requests_total{service=\"gatekeeper\"}[1m])",
+            "legendFormat": "1️⃣ Gatekeeper Inspection"
+          },
+          {
+            "expr": "rate(cerberus_poi_tagged_total[1m])",
+            "legendFormat": "2️⃣ POI Tagged (ML Detected)"
+          },
+          {
+            "expr": "rate(cerberus_requests_total{service=\"labyrinth\"}[1m])",
+            "legendFormat": "3️⃣ Honeypot Redirection"
+          },
+          {
+            "expr": "rate(cerberus_simulations_total[1m])",
+            "legendFormat": "4️⃣ Sentinel Simulation"
+          }
+        ]
       },
-      "id": 6,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "single"
-        }
+      {
+        "id": 6,
+        "title": "🧠 ML Anomaly Scores Distribution",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 18},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(cerberus_ml_anomaly_score_bucket[5m]))",
+            "legendFormat": "95th Percentile"
+          },
+          {
+            "expr": "histogram_quantile(0.50, rate(cerberus_ml_anomaly_score_bucket[5m]))",
+            "legendFormat": "Median"
+          }
+        ]
       },
-      "pluginVersion": "8.0.0",
-      "targets": [
-        {
-          "expr": "sum(cerberus_simulations_total) by (service, verdict)",
-          "legendFormat": "{{service}} - {{verdict}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Simulations Executed",
-      "type": "timeseries"
-    }
-  ],
-  "refresh": "5s",
-  "schemaVersion": 27,
-  "style": "dark",
-  "tags": ["cerberus", "security"],
-  "templating": {
-    "list": []
-  },
-  "time": {
-    "from": "now-15m",
-    "to": "now"
-  },
-  "timepicker": {},
-  "timezone": "",
-  "title": "Cerberus Overview",
-  "uid": "cerberus-overview",
-  "version": 1
+      {
+        "id": 7,
+        "title": "🚨 Blocked vs Allowed vs POI Tagged",
+        "type": "piechart",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 18},
+        "targets": [
+          {
+            "expr": "sum(cerberus_requests_blocked_total)",
+            "legendFormat": "Blocked"
+          },
+          {
+            "expr": "sum(cerberus_requests_allowed_total)",
+            "legendFormat": "Allowed"
+          },
+          {
+            "expr": "sum(cerberus_poi_tagged_total)",
+            "legendFormat": "POI Tagged"
+          }
+        ]
+      },
+      {
+        "id": 8,
+        "title": "🔍 Attack Patterns Detected",
+        "type": "table",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 26},
+        "targets": [
+          {
+            "expr": "topk(10, sum by (attack_type) (cerberus_attack_patterns_total))",
+            "format": "table",
+            "instant": true
+          }
+        ]
+      },
+      {
+        "id": 9,
+        "title": "🍯 Honeypot Evidence Captured",
+        "type": "stat",
+        "gridPos": {"h": 8, "w": 6, "x": 12, "y": 26},
+        "targets": [
+          {
+            "expr": "sum(cerberus_payloads_captured_total)",
+            "legendFormat": "Total Payloads"
+          }
+        ]
+      },
+      {
+        "id": 10,
+        "title": "⚡ Sentinel WAF Rules Generated",
+        "type": "stat",
+        "gridPos": {"h": 8, "w": 6, "x": 18, "y": 26},
+        "targets": [
+          {
+            "expr": "sum(cerberus_rules_generated_total)",
+            "legendFormat": "Auto-Generated Rules"
+          }
+        ]
+      },
+      {
+        "id": 11,
+        "title": "📈 Request Processing Latency (Gatekeeper)",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 34},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.99, rate(cerberus_request_duration_seconds_bucket{service=\"gatekeeper\"}[5m]))",
+            "legendFormat": "p99"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(cerberus_request_duration_seconds_bucket{service=\"gatekeeper\"}[5m]))",
+            "legendFormat": "p95"
+          },
+          {
+            "expr": "histogram_quantile(0.50, rate(cerberus_request_duration_seconds_bucket{service=\"gatekeeper\"}[5m]))",
+            "legendFormat": "p50"
+          }
+        ]
+      },
+      {
+        "id": 12,
+        "title": "💾 Database Operations",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 34},
+        "targets": [
+          {
+            "expr": "rate(cerberus_db_operations_total{db=\"redis\"}[1m])",
+            "legendFormat": "Redis Ops/sec"
+          },
+          {
+            "expr": "rate(cerberus_db_operations_total{db=\"postgres\"}[1m])",
+            "legendFormat": "PostgreSQL Ops/sec"
+          }
+        ]
+      }
+    ],
+    "time": {"from": "now-15m", "to": "now"},
+    "refresh": "5s"
+  }
 }

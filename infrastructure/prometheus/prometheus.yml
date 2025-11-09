@@ -19,14 +19,10 @@ scrape_configs:
     static_configs:
       - targets: ['cerberus-sentinel:8003']
 
-  - job_name: 'redis_exporter'
+  - job_name: 'redis'
     static_configs:
-      - targets: ['cerberus-redis-exporter:9121']
+      - targets: ['cerberus-redis:6379']
 
-  - job_name: 'kafka_exporter'
+  - job_name: 'kafka'
     static_configs:
-      - targets: ['cerberus-kafka-exporter:9308']
-
-  - job_name: 'prometheus'
-    static_configs:
-      - targets: ['cerberus-prometheus:9090']
+      - targets: ['cerberus-kafka:9092']
