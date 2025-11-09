@@ -1,0 +1,28 @@
+# Sentinel AI - ML Dependencies
+
+# Core ML
+scikit-learn>=1.3.0
+numpy>=1.24.0
+joblib>=1.3.0
+
+# Model serving
+fastapi>=0.104.0
+uvicorn>=0.24.0
+
+# Event streaming
+kafka-python>=2.0.2
+
+# Data handling
+pandas>=2.0.0  # Optional for dataset analysis
+
+# Explainability (optional, for production)
+shap>=0.43.0  # Uncomment for true SHAP values
+
+# Deep learning (optional, for transformer models)
+# torch>=2.0.0
+# transformers>=4.30.0
+
+# Testing
+pytest>=7.4.0
+pytest-cov>=4.1.0
+pytest-asyncio>=0.21.0

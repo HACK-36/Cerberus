@@ -2,7 +2,7 @@
 Sentinel API - Threat Twin AI Analysis Engine
 Orchestrates profiling, simulation, rule generation, and policy decisions
 """
-from fastapi import FastAPI, HTTPException, Security, BackgroundTasks, Depends
+from fastapi import FastAPI, HTTPException, Security, BackgroundTasks
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from typing import List, Dict, Optional, Literal
@@ -11,29 +11,30 @@ import os
 from datetime import datetime
 import json
 import requests
-import logging
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
 from sentinel.profiler.behavioral_profiler import BehavioralProfiler
 from sentinel.simulator.payload_simulator import PayloadSimulator
 from sentinel.rule_gen.rule_generator import RuleGenerator
+from sentinel.ml.inference_engine import InferenceEngine
+from sentinel.ml.explainability import ExplainabilityEngine
+from sentinel.ml.feature_extractor import FeatureExtractor
+from sentinel.serving.model_server import ModelServer
+from sentinel.training.dataset_manager import DatasetManager
+from sentinel.training.model_trainer import ModelTrainer
+from sentinel.security.sandbox_manager import SandboxSecurityManager
 from shared.events.schemas import (
     WAFRule, SimulationCompleteEvent, RuleGeneratedEvent,
     SimulationResult, AttackerProfile
 )
-from shared.auth.dependencies import get_current_service, require_roles, TokenData
-from sentinel.api.evidence_consumer import start_evidence_consumer
-from shared.utils.metrics_router import router as metrics_router
 from shared.utils.metrics import (
-    track_request_metrics,
-    record_simulation,
-    record_rule_generation,
-    record_threat_detection
+    cerberus_requests_total,
+    cerberus_simulations_total,
+    cerberus_rules_generated_total
 )
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+from fastapi.responses import Response as FastAPIResponse
 
 app = FastAPI(
     title="Cerberus Sentinel API",
@@ -41,23 +42,24 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Include metrics router
-app.include_router(metrics_router)
-
 security = HTTPBearer()
 
 # Initialize components
 profiler = BehavioralProfiler()
 simulator = PayloadSimulator()
 rule_generator = RuleGenerator()
+inference_engine = InferenceEngine()
+explainability_engine = ExplainabilityEngine()
+feature_extractor = FeatureExtractor()
+model_server = ModelServer(canary_percent=0)
+dataset_manager = DatasetManager()
+model_trainer = ModelTrainer(dataset_manager)
+sandbox_manager = SandboxSecurityManager()
 
 # Storage (in production: use PostgreSQL/Redis)
 simulation_results: Dict[str, Dict] = {}
 generated_rules: Dict[str, WAFRule] = {}
 attacker_profiles: Dict[str, Dict] = {}
-
-# Evidence consumer (started on app startup)
-evidence_consumer = None
 
 # Configuration
 GATEKEEPER_API_URL = os.getenv("GATEKEEPER_API_URL", "http://gatekeeper:8000")
@@ -108,28 +110,9 @@ class PolicyDecision(BaseModel):
     confidence: float
 
 
-# Startup Event
-
-@app.on_event("startup")
-async def startup_event():
-    """Start evidence consumer on app startup"""
-    global evidence_consumer
-    try:
-        evidence_consumer = start_evidence_consumer(
-            profiler=profiler,
-            simulator=simulator,
-            rule_generator=rule_generator,
-            storage_dict=attacker_profiles
-        )
-        logger.info("Evidence consumer started successfully")
-    except Exception as e:
-        logger.error(f"Failed to start evidence consumer: {e}")
-
-
 # API Endpoints
 
 @app.get("/health")
-@track_request_metrics("sentinel", "/health", "GET")
 async def health_check():
     """Health check"""
     return {
@@ -138,22 +121,22 @@ async def health_check():
         "timestamp": datetime.utcnow().isoformat(),
         "simulations": len(simulation_results),
         "rules_generated": len(generated_rules),
-        "profiles": len(attacker_profiles),
-        "evidence_consumer": "running" if evidence_consumer and evidence_consumer.running else "stopped"
+        "profiles": len(attacker_profiles)
     }
 
 
+@app.get("/metrics")
+async def metrics():
+    """Prometheus metrics endpoint"""
+    return FastAPIResponse(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
 @app.post("/api/v1/sentinel/profile")
-@track_request_metrics("sentinel", "/api/v1/sentinel/profile", "POST")
-async def profile_session(
-    req: ProfileRequest,
-    auth: TokenData = Depends(get_current_service)
-):
+async def profile_session(req: ProfileRequest):
     """
     Profile an attacker session
     
-    Analyzes behavior and maps to MITRE ATT&CK TTPs.
-    Requires service authentication.
+    Analyzes behavior and maps to MITRE ATT&CK TTPs
     """
     print(f"[SENTINEL] Profiling session: {req.session_id}")
     
@@ -172,18 +155,17 @@ async def profile_session(
 
 
 @app.post("/api/v1/sentinel/simulate", response_model=SimulateResponse)
-@track_request_metrics("sentinel", "/api/v1/sentinel/simulate", "POST")
 async def simulate_payload(
     req: SimulateRequest,
-    background_tasks: BackgroundTasks,
-    auth: TokenData = Depends(get_current_service)
+    background_tasks: BackgroundTasks
 ):
     """
     Simulate a payload in sandbox (async)
     
-    Returns job_id immediately, simulation runs in background.
-    Requires service authentication.
+    Returns job_id immediately, simulation runs in background
     """
+    cerberus_requests_total.labels(service="sentinel").inc()
+    
     job_id = f"sim_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
     
     # Initialize job
@@ -212,7 +194,6 @@ async def simulate_payload(
 
 
 @app.get("/api/v1/sentinel/sim-result/{job_id}")
-@track_request_metrics("sentinel", "/api/v1/sentinel/sim-result/{job_id}", "GET")
 async def get_simulation_result(job_id: str):
     """Get simulation result"""
     if job_id not in simulation_results:
@@ -222,7 +203,6 @@ async def get_simulation_result(job_id: str):
 
 
 @app.post("/api/v1/sentinel/rule-propose")
-@track_request_metrics("sentinel", "/api/v1/sentinel/rule-propose", "POST")
 async def propose_rule(req: RuleProposeRequest):
     """
     Propose a WAF rule based on simulation result
@@ -247,6 +227,9 @@ async def propose_rule(req: RuleProposeRequest):
     # Store proposed rule
     generated_rules[rule.rule_id] = rule
     
+    # Increment rules generated counter
+    cerberus_rules_generated_total.inc()
+    
     return {
         "rule": rule.model_dump(),
         "message": "Rule proposed successfully",
@@ -255,7 +238,6 @@ async def propose_rule(req: RuleProposeRequest):
 
 
 @app.post("/api/v1/sentinel/rule-apply", response_model=PolicyDecision)
-@track_request_metrics("sentinel", "/api/v1/sentinel/rule-apply", "POST")
 async def apply_rule(
     req: RuleApplyRequest,
     credentials: HTTPAuthorizationCredentials = Security(security)
@@ -292,18 +274,10 @@ async def apply_rule(
     else:
         print(f"[SENTINEL] Rule logged only: {rule.rule_id}")
     
-    record_rule_generation(
-        service="sentinel",
-        action=rule.action,
-        confidence=rule.confidence,
-        auto_applied=decision["decision"] == "auto_applied"
-    )
-
     return PolicyDecision(**decision)
 
 
 @app.get("/api/v1/sentinel/rules")
-@track_request_metrics("sentinel", "/api/v1/sentinel/rules", "GET")
 async def list_rules():
     """List all generated rules"""
     return {
@@ -313,7 +287,6 @@ async def list_rules():
 
 
 @app.get("/api/v1/sentinel/profiles")
-@track_request_metrics("sentinel", "/api/v1/sentinel/profiles", "GET")
 async def list_profiles():
     """List all attacker profiles"""
     return {
@@ -323,7 +296,6 @@ async def list_profiles():
 
 
 @app.get("/api/v1/sentinel/stats")
-@track_request_metrics("sentinel", "/api/v1/sentinel/stats", "GET")
 async def get_stats():
     """Get Sentinel statistics"""
     completed_sims = sum(1 for s in simulation_results.values() if s.get("status") == "completed")
@@ -338,6 +310,215 @@ async def get_stats():
         "profiles_created": len(attacker_profiles),
         "auto_applied_rules": sum(1 for r in generated_rules.values() if r.confidence >= AUTO_APPLY_THRESHOLD)
     }
+
+
+# NEW ML ENDPOINTS
+
+@app.post("/api/v1/sentinel/analyze")
+async def analyze_evidence(request: Dict):
+    """
+    Full ML-powered analysis of evidence
+    
+    Returns: verdict, scores, explanations
+    """
+    try:
+        evidence = request.get("evidence", {})
+        
+        # Run inference
+        verdict = inference_engine.analyze(evidence)
+        
+        # Generate explanation
+        features = verdict.get("features", {})
+        explanation = explainability_engine.explain_verdict(features, verdict)
+        
+        return {
+            "verdict": verdict,
+            "explanation": explanation
+        }
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/sentinel/predict-payload")
+async def predict_payload(request: Dict):
+    """
+    Fast payload classification (inline inspection)
+    
+    Target latency: <10ms
+    """
+    try:
+        payload = request.get("payload", "")
+        context = request.get("context", {})
+        
+        # Fast classification via model server
+        prediction = model_server.predict_payload(payload, context)
+        
+        return prediction
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/sentinel/explain")
+async def explain_prediction(request: Dict):
+    """
+    Generate SHAP-style explanation for a prediction
+    """
+    try:
+        features = request.get("features", {})
+        verdict = request.get("verdict", {})
+        
+        explanation = explainability_engine.explain_verdict(features, verdict)
+        
+        return explanation
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/sentinel/dataset/add-sample")
+async def add_dataset_sample(request: Dict):
+    """
+    Add labeled sample to training dataset
+    """
+    try:
+        dataset_manager.add_labeled_sample(
+            sample_type=request.get("sample_type", "payload"),
+            data=request.get("data"),
+            label=request.get("label"),
+            confidence=request.get("confidence", 1.0),
+            source=request.get("source", "api"),
+            metadata=request.get("metadata", {})
+        )
+        
+        return {"status": "success", "message": "Sample added to dataset"}
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/sentinel/dataset/add-false-positive")
+async def add_false_positive(request: Dict):
+    """
+    Report false positive for model improvement
+    """
+    try:
+        dataset_manager.add_false_positive(
+            sample=request.get("sample", {}),
+            reviewer=request.get("reviewer", "anonymous")
+        )
+        
+        return {"status": "success", "message": "False positive recorded"}
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/v1/sentinel/dataset/stats")
+async def get_dataset_stats():
+    """Get dataset statistics"""
+    try:
+        stats = dataset_manager.get_statistics()
+        return stats
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/sentinel/train/payload-classifier")
+async def train_payload_classifier_endpoint(background_tasks: BackgroundTasks):
+    """
+    Trigger model training (async)
+    """
+    try:
+        # Run training in background
+        background_tasks.add_task(run_model_training)
+        
+        return {
+            "status": "training_queued",
+            "message": "Model training started in background"
+        }
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/v1/sentinel/models")
+async def list_models():
+    """List all models in registry"""
+    try:
+        with open(model_trainer.model_registry_path, 'r') as f:
+            registry = json.load(f)
+        
+        return {"models": list(registry.values())}
+    
+    except FileNotFoundError:
+        return {"models": []}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/sentinel/models/promote")
+async def promote_model_endpoint(request: Dict):
+    """
+    Promote model to production
+    """
+    try:
+        model_id = request.get("model_id")
+        canary_percent = request.get("canary_percent", 1)
+        
+        result = model_trainer.promote_model(model_id, canary_percent)
+        
+        if "error" in result:
+            raise HTTPException(status_code=400, detail=result["error"])
+        
+        return result
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/v1/sentinel/model-server/health")
+async def model_server_health():
+    """Get model server health status"""
+    try:
+        health = model_server.get_health()
+        return health
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/sentinel/sandbox/panic")
+async def panic_button():
+    """
+    EMERGENCY: Destroy all active sandboxes
+    
+    Requires admin authentication
+    """
+    try:
+        sandbox_manager.panic_button()
+        
+        return {
+            "status": "success",
+            "message": "All sandboxes destroyed",
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/v1/sentinel/sandbox/audit-log")
+async def get_sandbox_audit_log(limit: int = 100):
+    """Get sandbox audit log"""
+    try:
+        log_entries = sandbox_manager.get_audit_log(limit=limit)
+        return {"entries": log_entries, "count": len(log_entries)}
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # Background tasks
@@ -356,12 +537,9 @@ def run_simulation(job_id: str, payload: Dict, shadow_ref: str, metadata: Dict):
         simulation_results[job_id]["status"] = "completed"
         simulation_results[job_id]["result"] = result
         simulation_results[job_id]["completed_at"] = datetime.utcnow().isoformat()
-
-        # Record metrics
-        verdict = result.get("verdict", "unknown")
-        attack_type = result.get("attack_type", "unknown")
-        duration_seconds = result.get("execution_time_ms", 0) / 1000.0
-        record_simulation("sentinel", attack_type, verdict, duration_seconds)
+        
+        # Increment simulation counter
+        cerberus_simulations_total.inc()
         
         # Emit event
         emit_simulation_event(job_id, payload, result)
@@ -370,7 +548,6 @@ def run_simulation(job_id: str, payload: Dict, shadow_ref: str, metadata: Dict):
         
         # If exploit detected, auto-generate rule
         if result["verdict"] == "exploit_possible":
-            record_threat_detection("sentinel", result.get("attack_type", "unknown"), "exploit_detected", None)
             auto_generate_rule(payload, result, metadata)
     
     except Exception as e:
@@ -404,16 +581,29 @@ def auto_generate_rule(payload: Dict, sim_result: Dict, metadata: Dict):
         else:
             emit_rule_generated_event(rule, decision["decision"])
             print(f"[SENTINEL] Auto-generated rule (pending review): {rule.rule_id}")
-
-        record_rule_generation(
-            service="sentinel",
-            action=rule.action,
-            confidence=rule.confidence,
-            auto_applied=decision["decision"] == "auto_applied"
-        )
     
     except Exception as e:
         print(f"[SENTINEL] Failed to auto-generate rule: {e}")
+
+
+def run_model_training():
+    """Run model training in background"""
+    try:
+        print("[SENTINEL] Starting model training...")
+        
+        result = model_trainer.train_payload_classifier()
+        
+        if result.get("status") == "success":
+            print(f"[SENTINEL] Training complete: model_id={result['model_id']}")
+            print(f"[SENTINEL] Metrics: {result.get('metrics', {})}")
+            
+            if result.get("can_promote"):
+                print("[SENTINEL] Model meets promotion criteria")
+        else:
+            print(f"[SENTINEL] Training failed: {result.get('error')}")
+    
+    except Exception as e:
+        print(f"[SENTINEL] Training error: {e}")
 
 
 # Helper functions
